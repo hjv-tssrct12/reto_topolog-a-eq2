@@ -6,7 +6,9 @@
       "PowerShell($file = ls \"C:\\\\Users\\\\hugoj\\\\Desktop\\\\Tec\\\\Topo\\\\Reto_Topolog-a-Eq2\\\\Codigos\" | Select-Object -First 1; $file.FullName; $file.Name.Length; [System.Text.Encoding]::UTF8.GetBytes\\($file.Name\\) | ForEach-Object { \"{0:X2}\" -f $_ } | Join-String -Separator \" \")",
       "PowerShell($file = ls \"C:\\\\Users\\\\hugoj\\\\Desktop\\\\Tec\\\\Topo\\\\Reto_Topolog-a-Eq2\\\\Codigos\" | Select-Object -First 1; $bytes = [System.Text.Encoding]::UTF8.GetBytes\\($file.Name\\); \\($bytes | ForEach-Object { \"{0:X2}\" -f $_ }\\) -join \" \")",
       "PowerShell($file = ls \"C:\\\\Users\\\\hugoj\\\\Desktop\\\\Tec\\\\Topo\\\\Reto_Topolog-a-Eq2\\\\Codigos\" | Select-Object -First 1; [System.IO.File]::ReadAllText\\($file.FullName, [System.Text.Encoding]::UTF8\\) | Select-Object -First 1)",
-      "PowerShell(pip install *)"
+      "PowerShell(pip install *)",
+      "Bash(python -c ' *)",
+      "Bash(python Codigos/etapa3_regresiones_AF.py)"
     ]
   }
 }

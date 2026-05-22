@@ -87,6 +87,75 @@ print(f"    Maternas(Y): {list(MATERNAS.keys())}")
 print(f"    Neonat.(Y) : {list(NEONATALES.keys())}")
 
 # =============================================================================
+# 2b. CARGA Y UNIÓN CON BASE DATOS ADICIONAL
+# =============================================================================
+print("\n" + "=" * 70)
+print("CARGANDO Y UNIENDO BASE DATOS ADICIONAL")
+print("=" * 70)
+
+DATA_PATH2 = BASE_DIR / "BD" / "2. Base Datos encuesta AF 2_mas completa 2.xlsx"
+
+# Leer como texto para detectar y limpiar valores no numéricos (ej. "x")
+df_raw2 = pd.read_excel(DATA_PATH2, sheet_name="Base Consenso", dtype=str)
+print(f"  Dimensiones base adicional (raw): {df_raw2.shape}")
+
+# Nombres exactos de columnas en la nueva base
+_SAF = "SAF mg AF/día "    # tiene espacio al final en el archivo
+_MAF = "MAF mg AF/día"
+_PAN = "Pan mg AF  día"    # tiene doble espacio en el nombre
+
+_src_cols = [
+    "Edad Madre", "Nivel Educacional C", "Número Embarazo", "Region C",
+    "Delta Peso Gestacional", "Delta IMC", "Sexo RN C", "Peso RN", "EG RN",
+    _SAF, _MAF, _PAN,
+]
+
+# Excluir filas con motivo de eliminación (incluye filas de resumen estadístico)
+n_antes = len(df_raw2)
+df_raw2 = df_raw2[df_raw2["Motivo Eliminación"].isna()].reset_index(drop=True)
+print(f"  Filas excluidas (Motivo Eliminación no nulo): {n_antes - len(df_raw2)}")
+print(f"  Filas válidas base adicional: {len(df_raw2)}")
+
+df_new = df_raw2[_src_cols].copy()
+
+# Limpiar: "x"/"X" → "0" (celdas que debían ser 0) y convertir a numérico
+for col in df_new.columns:
+    df_new[col] = df_new[col].str.strip().str.replace(r"^[xX]$", "0", regex=True)
+    df_new[col] = pd.to_numeric(df_new[col], errors="coerce")
+
+# Calcular variables AF derivadas (NaN si todos los sumandos son NaN)
+df_new["Total mg/d AF  suple y pan"] = (
+    df_new[[_SAF, _MAF, _PAN]].sum(axis=1, min_count=1)
+)
+df_new["mgAF/día Suplementos y multivitamínico 1°T"] = (
+    df_new[[_SAF, _MAF]].sum(axis=1, min_count=1)
+)
+df_new["mg/d AF total pan"] = df_new[_PAN]
+
+# DFE no disponible en la nueva base
+df_new["Total mg/d DFE suple y pan"] = np.nan
+
+# Renombrar al esquema de la base actual
+df_new.rename(columns={
+    "Edad Madre"            : "Edad madre",
+    "Nivel Educacional C"   : "Educación",
+    "Número Embarazo"       : "N° embarazo",
+    "Region C"              : "Región",
+    "Delta Peso Gestacional": "Dif peso mamá",
+    "Delta IMC"             : "Dif IMC",
+    "Sexo RN C"             : "Sexo hijo",
+    "Peso RN"               : "PN hijo (g)",
+    "EG RN"                 : "EG hijo (sem)",
+}, inplace=True)
+
+df_new_sel = df_new[all_cols].copy()
+print(f"  Filas base original  : {len(df)}")
+print(f"  Filas base adicional : {len(df_new_sel)}")
+
+df = pd.concat([df, df_new_sel], ignore_index=True)
+print(f"  Filas combinadas     : {len(df)}")
+
+# =============================================================================
 # 3. LIMPIEZA
 # =============================================================================
 print("\n" + "=" * 70)
@@ -121,8 +190,9 @@ miss = pd.DataFrame({
 print("\n  Valores faltantes por variable:")
 print(miss.to_string())
 
-# Eliminar filas con missing en predictores AF/DFE
-df_clean = df.dropna(subset=af_cols).copy()
+# Eliminar filas con missing en predictores AF (excluye DFE, ausente en base2)
+af_cols_required = [c for c in af_cols if "DFE" not in c]
+df_clean = df.dropna(subset=af_cols_required).copy()
 df_clean.reset_index(drop=True, inplace=True)
 print(f"\n  Filas originales    : {len(df)}")
 print(f"  Filas tras limpieza : {len(df_clean)}  "
