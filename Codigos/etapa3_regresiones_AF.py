@@ -396,9 +396,56 @@ for s in wb.sheetnames:
     print(f"  - {s}")
 wb.close()
 
+# =============================================================================
+# 10. GRÁFICO — Regresión Lineal: Total AF vs Edad madre
+# =============================================================================
+print("\n" + "=" * 70)
+print("GRÁFICO — Total AF (suple+pan) → Edad madre")
+print("=" * 70)
+
+_x_col = "Total mg/d AF  suple y pan"
+_y_col = "Edad madre"
+
+_sub = df_clean[[_x_col, _y_col]].dropna()
+_X   = sm.add_constant(_sub[_x_col])
+_mod = sm.OLS(_sub[_y_col], _X).fit()
+_row = df_results[
+    (df_results["Variable AF/DFE"] == "Total AF (suple+pan)") &
+    (df_results["Outcome"]         == "Edad madre")
+].iloc[0]
+
+_x_range = np.linspace(_sub[_x_col].min(), _sub[_x_col].max(), 200)
+_y_pred  = _mod.params["const"] + _mod.params[_x_col] * _x_range
+
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.scatter(_sub[_x_col], _sub[_y_col], alpha=0.45, s=30,
+           color="#4C72B0", edgecolors="white", linewidths=0.4, label="Observaciones")
+ax.plot(_x_range, _y_pred, color="#C44E52", linewidth=2, label="Línea de regresión")
+
+_sig = _row["Significancia"]
+_ann = (f"β = {_row['beta']:.4f}\n"
+        f"R² = {_row['R2']:.4f}\n"
+        f"p = {_row['p-valor']:.4f}  {_sig}\n"
+        f"n = {int(_row['n'])}")
+ax.text(0.97, 0.97, _ann, transform=ax.transAxes,
+        fontsize=9, va="top", ha="right",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="lightyellow", alpha=0.85))
+
+ax.set_xlabel("Total AF (suplementos + pan)  [mg/día]", fontsize=11)
+ax.set_ylabel("Edad madre  [años]", fontsize=11)
+ax.set_title("Regresión Lineal: Total AF → Edad madre", fontsize=13, fontweight="bold")
+ax.legend(fontsize=9)
+plt.tight_layout()
+
+_reg_plot_path = RES_DIR / "reg_TotalAF_EdadMadre.png"
+plt.savefig(_reg_plot_path, dpi=150, bbox_inches="tight")
+plt.close()
+print(f"Gráfico guardado: {_reg_plot_path}")
+
 print("\n" + "=" * 70)
 print("ANÁLISIS COMPLETADO")
 print("=" * 70)
 print(f"  BD limpia         : {BD_OUT}")
 print(f"  Resultados Excel  : {RES_OUT}")
 print(f"  Heatmap           : {heatmap_path}")
+print(f"  Gráfico regresión : {_reg_plot_path}")
