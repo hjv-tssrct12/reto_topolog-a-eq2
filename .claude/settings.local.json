@@ -8,7 +8,12 @@
       "PowerShell($file = ls \"C:\\\\Users\\\\hugoj\\\\Desktop\\\\Tec\\\\Topo\\\\Reto_Topolog-a-Eq2\\\\Codigos\" | Select-Object -First 1; [System.IO.File]::ReadAllText\\($file.FullName, [System.Text.Encoding]::UTF8\\) | Select-Object -First 1)",
       "PowerShell(pip install *)",
       "Bash(python -c ' *)",
-      "Bash(python Codigos/etapa3_regresiones_AF.py)"
+      "Bash(python Codigos/etapa3_regresiones_AF.py)",
+      "Bash(python -c \"import pandas as pd; df = pd.read_excel\\('BD/DB_Limpia_TDA.xlsx'\\); print\\('Shape:', df.shape\\); print\\('\\\\nColumnas:'\\); [print\\(' ', c\\) for c in df.columns]\")",
+      "Bash(python -c \"import kmapper; print\\('kmapper', kmapper.__version__\\)\")",
+      "Bash(python -c \"import sklearn; print\\('sklearn', sklearn.__version__\\)\")",
+      "Bash(pip install *)",
+      "Bash(python Codigos/etapa4_mapper_TDA.py)"
     ]
   }
 }
