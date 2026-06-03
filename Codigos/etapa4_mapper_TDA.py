@@ -28,6 +28,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import kmapper as km
+import umap
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.cluster import DBSCAN
 from pathlib import Path
@@ -91,7 +92,7 @@ for col in OUTCOME_COLS:
 
 assert df_work[OUTCOME_COLS].isna().sum().sum() == 0, "NaN restantes en features"
 
-# Lente y categoría
+# Categoría y AF continuo (para colorear el grafo)
 lente_vals = df_work[LENTE_COL].values
 cat_vals   = df_work[CAT_COL].values      # "Bajo" / "Medio" / "Alto"
 cat_enc    = np.array([CAT_ORDER.index(c) for c in cat_vals], dtype=float)  # 0/1/2
@@ -105,24 +106,43 @@ for cat in CAT_ORDER:
 scaler = MinMaxScaler()
 X = scaler.fit_transform(df_work[OUTCOME_COLS].values)
 
-# Lente normalizada [0, 1]
+# AF normalizado (solo para colorear HTML)
 lente_norm = MinMaxScaler().fit_transform(lente_vals.reshape(-1, 1))
 
 print(f"\n  Espacio de features ({len(OUTCOME_COLS)} vars): {OUTCOME_COLS}")
-print(f"  Lente: {LENTE_COL}")
+print(f"  Lente: UMAP 2D sobre el espacio de features")
+
+# =============================================================================
+# 3b. UMAP — reducción a 2D para usar como lente del Mapper
+# =============================================================================
+print("\n" + "=" * 70)
+print("COMPUTANDO UMAP 2D (lente del Mapper)")
+print("=" * 70)
+
+UMAP_N_NEIGHBORS = 15
+UMAP_MIN_DIST    = 0.1
+UMAP_SEED        = 42
+
+reducer   = umap.UMAP(n_components=2, n_neighbors=UMAP_N_NEIGHBORS,
+                      min_dist=UMAP_MIN_DIST, random_state=UMAP_SEED)
+X_umap    = reducer.fit_transform(X)
+lente_2d  = MinMaxScaler().fit_transform(X_umap)   # normalizar [0,1] para el Cover
+
+print(f"  n_neighbors={UMAP_N_NEIGHBORS}, min_dist={UMAP_MIN_DIST}, seed={UMAP_SEED}")
+print(f"  Embedding shape: {lente_2d.shape}")
 
 # =============================================================================
 # 4. PARÁMETROS DEL MAPPER
 # =============================================================================
-N_CUBES  = 10
+N_CUBES  = 8     # por dimensión — con lente 2D el cover crea N_CUBES² celdas
 OVERLAP  = 0.50
-EPS      = 0.35
-MIN_SAMP = 3
+EPS      = 0.42
+MIN_SAMP = 4
 
 cover     = km.Cover(n_cubes=N_CUBES, perc_overlap=OVERLAP)
 clusterer = DBSCAN(eps=EPS, min_samples=MIN_SAMP)
 
-print(f"\n  Cover  : n_cubes={N_CUBES}, overlap={OVERLAP}")
+print(f"\n  Cover  : n_cubes={N_CUBES} (2D → hasta {N_CUBES**2} celdas), overlap={OVERLAP}")
 print(f"  DBSCAN : eps={EPS}, min_samples={MIN_SAMP}")
 
 # =============================================================================
@@ -133,10 +153,10 @@ print("EJECUTANDO MAPPER")
 print("=" * 70)
 
 mapper = km.KeplerMapper(verbose=1)
-graph  = mapper.map(lente_norm, X, cover=cover, clusterer=clusterer)
+graph  = mapper.map(lente_2d, X, cover=cover, clusterer=clusterer)
 
 n_nodes = len(graph["nodes"])
-n_edges = sum(len(v) for v in graph["links"].values()) // 2
+n_edges = sum(len(v) for v in graph["links"].values())
 print(f"\n  Nodos: {n_nodes}  |  Aristas: {n_edges}")
 
 # =============================================================================
@@ -148,7 +168,7 @@ mapper.visualize(
     graph,
     color_values=lente_norm.ravel(),
     color_function_name="Total AF mg/día (normalizado)",
-    title="Mapper TDA — Lente: Total AF | Color: Total AF",
+    title="Mapper TDA — Lente: UMAP 2D | Color: Total AF mg/día",
     path_html=str(HTML_AF),
 )
 print(f"\n  HTML (continuo) : {HTML_AF}")
@@ -158,7 +178,7 @@ mapper.visualize(
     graph,
     color_values=cat_enc,
     color_function_name="Categoría AF  (0=Bajo · 1=Medio · 2=Alto)",
-    title="Mapper TDA — Lente: Total AF | Color: Categoría AF",
+    title="Mapper TDA — Lente: UMAP 2D | Color: Categoría AF (0=Bajo · 1=Medio · 2=Alto)",
     path_html=str(HTML_CAT),
 )
 print(f"  HTML (categoría): {HTML_CAT}")
@@ -245,15 +265,18 @@ print(f"\n  Gráfico composición: {PNG_COMP}")
 # 9. EXPORTAR EXCEL
 # =============================================================================
 params = {
-    "n_filas"           : len(df_work),
-    "features"          : ", ".join(OUTCOME_COLS),
-    "lente"             : LENTE_COL,
-    "n_cubes"           : N_CUBES,
-    "overlap"           : OVERLAP,
-    "dbscan_eps"        : EPS,
-    "dbscan_min_samples": MIN_SAMP,
-    "nodos"             : n_nodes,
-    "aristas"           : n_edges,
+    "n_filas"              : len(df_work),
+    "features"             : ", ".join(OUTCOME_COLS),
+    "lente"                : "UMAP 2D sobre espacio de features",
+    "umap_n_neighbors"     : UMAP_N_NEIGHBORS,
+    "umap_min_dist"        : UMAP_MIN_DIST,
+    "umap_seed"            : UMAP_SEED,
+    "n_cubes"              : N_CUBES,
+    "overlap"              : OVERLAP,
+    "dbscan_eps"           : EPS,
+    "dbscan_min_samples"   : MIN_SAMP,
+    "nodos"                : n_nodes,
+    "aristas"              : n_edges,
 }
 
 with pd.ExcelWriter(EXCEL_OUT, engine="openpyxl") as writer:

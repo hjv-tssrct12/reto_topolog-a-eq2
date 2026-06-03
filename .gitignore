@@ -1,0 +1,10 @@
+# Entorno virtual
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+
+# Config local
+.claude/settings.local.json
