@@ -134,10 +134,22 @@ def main() -> None:
 
     log.info("  Best regression model : %s (R²=%.4f)",
              best_reg["modelo"], best_reg["best_score"])
-    log.info("  Best classification model: %s (F1=%.4f)",
-             best_clf["modelo"], best_clf["best_score"])
+    log.info(
+        "  Best classification model: %s  "
+        "f1_macro=%.4f  acc=%.4f  "
+        "[Bajo f1=%.3f | Medio f1=%.3f | Alto f1=%.3f]",
+        best_clf["modelo"],
+        best_clf["f1_macro"],
+        best_clf["accuracy_cv"],
+        best_clf.get("f1_Bajo",  0),
+        best_clf.get("f1_Medio", 0),
+        best_clf.get("f1_Alto",  0),
+    )
     log.info("\n%s", ml_reg_results)
-    log.info("\n%s", ml_clf_results)
+    log.info("\n%s", ml_clf_results[
+        ["modelo", "f1_macro", "accuracy_cv",
+         "f1_Bajo", "f1_Medio", "f1_Alto", "best_params"]
+    ])
 
     # ── Phase 7: Visualizations ────────────────────────────────────────────
     log.info("[Phase 7] Generating visualizations ...")
@@ -172,7 +184,10 @@ def main() -> None:
     print(f"  Config grid search        : n_cubes={gs_config['n_cubes']}  overlap={gs_config['overlap']}  score={gs_config['score']:.4f}")
     print(f"  Config final adoptada     : n_cubes={final_config['n_cubes']}  overlap={final_config['overlap']}")
     print(f"  Mejor regresor            : {best_reg['modelo']} (R²={best_reg['best_score']:.3f})")
-    print(f"  Mejor clasificador        : {best_clf['modelo']} (F1={best_clf['best_score']:.3f})")
+    print(f"  Mejor clasificador        : {best_clf['modelo']} (f1_macro={best_clf['f1_macro']:.3f}  acc={best_clf['accuracy_cv']:.3f})")
+    print(f"    Bajo  → f1={best_clf.get('f1_Bajo',  0):.3f}  precision={best_clf.get('precision_Bajo',  0):.3f}  recall={best_clf.get('recall_Bajo',  0):.3f}")
+    print(f"    Medio → f1={best_clf.get('f1_Medio', 0):.3f}  precision={best_clf.get('precision_Medio', 0):.3f}  recall={best_clf.get('recall_Medio', 0):.3f}")
+    print(f"    Alto  → f1={best_clf.get('f1_Alto',  0):.3f}  precision={best_clf.get('precision_Alto',  0):.3f}  recall={best_clf.get('recall_Alto',  0):.3f}")
     print(f"  Excel report              : {report_path}")
     print("=" * 60)
 
