@@ -33,6 +33,7 @@ from src.ml_grid_search import (
     regression_grid_search,
     classification_grid_search,
 )
+from src.feature_analysis import feature_importance_analysis  # ← Phase 9b
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -151,6 +152,17 @@ def main() -> None:
          "f1_Bajo", "f1_Medio", "f1_Alto", "best_params"]
     ])
 
+    # ── Phase 9b: Feature importance analysis ─────────────────────────────
+    log.info("[Phase 9b] Feature importance analysis ...")
+    from src.config import FEATURE_COLS
+    df_feature_importance = feature_importance_analysis(
+        X_features, lente_vals, cat_vals, list(FEATURE_COLS),
+    )
+    log.info("\n%s", df_feature_importance[
+        ["feature", "eta_squared", "rf_imp_mean",
+         "perm_imp_mean", "p_fdr", "kw_significativa", "composite_rank"]
+    ].to_string(index=False))
+
     # ── Phase 7: Visualizations ────────────────────────────────────────────
     log.info("[Phase 7] Generating visualizations ...")
     make_all_visualizations(final_graph, lente_vals, cat_enc, df_analysis)
@@ -169,6 +181,7 @@ def main() -> None:
         ml_clf_results     = ml_clf_results,
         gs_results_df      = gs_results_df,       # ← grid search ranking
         gs_config          = gs_config,           # ← grid search winner
+        df_feature_importance = df_feature_importance,  # ← Phase 9b
     )
 
     # ── Final summary ───────────────────────────────────────────────────────

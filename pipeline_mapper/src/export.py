@@ -93,6 +93,7 @@ def export_excel(
     ml_clf_results: Optional[pd.DataFrame] = None,
     gs_results_df: Optional[pd.DataFrame] = None,   # ← grid search ranking
     gs_config: Optional[Dict] = None,               # ← grid search winner
+    df_feature_importance: Optional[pd.DataFrame] = None,  # ← Phase 9b
 ) -> Path:
     """Write the multi-sheet Excel report.
 
@@ -109,6 +110,7 @@ def export_excel(
     9.  ml_clasificacion        — ML classification grid search (Phase 9)
     10. mapper_grid_search      — Mapper grid search ranking (Phase 5b) ← NEW
     11. mapper_gs_config        — Grid search winner + weight explanation ← NEW
+    12. feature_importance      — Feature importance + significance (Phase 9b) ← NEW
 
     Parameters
     ----------
@@ -209,6 +211,11 @@ def export_excel(
             df_gs_hp = _build_gs_hyperparams(gs_config)
             df_gs_hp.to_excel(
                 writer, sheet_name="mapper_gs_config",    index=False)
+
+        # ── Feature importance sheet (new) ──────────────────────────────
+        if df_feature_importance is not None:
+            df_feature_importance.to_excel(
+                writer, sheet_name="feature_importance", index=False)
 
     log.info("Excel report written: %s  (%d sheets)",
              output_path,
