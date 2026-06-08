@@ -83,6 +83,38 @@ df_work = df_work.dropna(subset=[LENTE_COL]).reset_index(drop=True)
 print(f"  Filas eliminadas (NaN en lente): {n_antes - len(df_work)}")
 print(f"  Filas para Mapper: {len(df_work)}")
 
+# --- Encoding de variables categóricas / texto ---
+print("\n  Encoding de variables categóricas:")
+
+ENCODING_LOG = {}
+
+def encode_if_object(df_in, col):
+    """Convierte columna texto a entero ordinal si es tipo object."""
+    if df_in[col].dtype == object:
+        vals = sorted(df_in[col].dropna().unique())
+        enc  = {v: i for i, v in enumerate(vals)}
+        df_in[col] = df_in[col].map(enc)
+        ENCODING_LOG[col] = enc
+        print(f"    '{col}': {enc}")
+    else:
+        print(f"    '{col}': ya numérica (dtype={df_in[col].dtype})")
+
+encode_if_object(df_work, "Educación")
+encode_if_object(df_work, "Región")
+
+# EG hijo (sem): forzar numérico por si contiene texto remanente
+if df_work["EG hijo (sem)"].dtype == object:
+    df_work["EG hijo (sem)"] = pd.to_numeric(df_work["EG hijo (sem)"], errors="coerce")
+    print(f"    'EG hijo (sem)': convertida a numérico")
+else:
+    print(f"    'EG hijo (sem)': ya numérica (dtype={df_work['EG hijo (sem)'].dtype})")
+
+# Forzar numérico cualquier otra columna de features que quede como object
+for col in OUTCOME_COLS:
+    if df_work[col].dtype == object:
+        df_work[col] = pd.to_numeric(df_work[col], errors="coerce")
+        print(f"    '{col}': forzada a numérico")
+
 # Imputar NaN en features con mediana
 for col in OUTCOME_COLS:
     if df_work[col].isna().any():

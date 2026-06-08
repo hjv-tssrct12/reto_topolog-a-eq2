@@ -16,7 +16,11 @@
       "Bash(python Codigos/etapa4_mapper_TDA.py)",
       "Bash(python -c \"import umap; print\\(umap.__version__\\)\")",
       "Bash(pip uninstall *)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(git fetch *)",
+      "Bash(git checkout *)",
+      "Bash(Get-ChildItem -Recurse -Force)",
+      "Bash(Select-Object FullName)"
     ]
   }
 }

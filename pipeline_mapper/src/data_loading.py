@@ -9,9 +9,44 @@ from sklearn.preprocessing import MinMaxScaler, RobustScaler
 
 from src.config import (
     BD_PATH, LENTE_COL, CAT_COL, CAT_ORDER, FEATURE_COLS,
+    CATEGORICAL_ENCODE_COLS, NUMERIC_FORCE_COLS,
 )
 
 log = logging.getLogger(__name__)
+
+
+def _encode_categoricals(df_work: pd.DataFrame) -> dict:
+    """Encode text columns to ordinal integers in-place; return encoding maps."""
+    encoding_log: dict = {}
+
+    for col in CATEGORICAL_ENCODE_COLS:
+        if col not in df_work.columns:
+            continue
+        if df_work[col].dtype == object:
+            vals = sorted(df_work[col].dropna().unique())
+            enc  = {v: i for i, v in enumerate(vals)}
+            df_work[col] = df_work[col].map(enc)
+            encoding_log[col] = enc
+            log.info("Encoded '%s': %s", col, enc)
+        else:
+            log.info("'%s' already numeric (dtype=%s)", col, df_work[col].dtype)
+
+    for col in NUMERIC_FORCE_COLS:
+        if col not in df_work.columns:
+            continue
+        if df_work[col].dtype == object:
+            df_work[col] = pd.to_numeric(df_work[col], errors="coerce")
+            log.info("Forced '%s' to numeric", col)
+        else:
+            log.info("'%s' already numeric (dtype=%s)", col, df_work[col].dtype)
+
+    # catch-all: any remaining object column in FEATURE_COLS
+    for col in FEATURE_COLS:
+        if col in df_work.columns and df_work[col].dtype == object:
+            df_work[col] = pd.to_numeric(df_work[col], errors="coerce")
+            log.warning("Force-converted remaining object column '%s' to numeric", col)
+
+    return encoding_log
 
 
 def load_and_clean() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
@@ -45,6 +80,8 @@ def load_and_clean() -> Tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
     df_work = df_work.dropna(subset=[LENTE_COL]).reset_index(drop=True)
     log.info("Rows dropped (NaN in lens): %d", n_before - len(df_work))
     log.info("Rows for Mapper: %d", len(df_work))
+
+    _encode_categoricals(df_work)
 
     for col in FEATURE_COLS:
         if df_work[col].isna().any():
