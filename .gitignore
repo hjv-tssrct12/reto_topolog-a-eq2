@@ -1,12 +1,13 @@
 # Entorno virtual
 .venv/
 
+# Claude Code
+.claude/
+
 # Python cache
 __pycache__/
 *.pyc
+*.pyo
 
-
-# Config local
-.claude/settings.local.json
-
-.claude/
+# Outputs generados
+pipeline_mapper/outputs/
