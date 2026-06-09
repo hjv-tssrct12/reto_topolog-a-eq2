@@ -1,0 +1,16 @@
+kmapper==2.1.0
+networkx
+numpy
+pandas
+scikit-learn
+scipy
+matplotlib
+seaborn
+openpyxl
+statsmodels
+ripser
+persim
+umap-learn
+joblib
+patsy
+pillow

@@ -1,23 +1,24 @@
-"""Phase 5: Mapper with adaptive DBSCAN and multiscale parameter sweep."""
+"""Phase 5: Mapper with multiple clusterers and multiscale parameter sweep."""
 
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Type
 
 import kmapper as km
 import networkx as nx
 import numpy as np
 import pandas as pd
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import DBSCAN, AgglomerativeClustering
 from sklearn.neighbors import NearestNeighbors
 
 from src.config import (
     DBSCAN_KNN_K,
     DBSCAN_KNN_PERCENTILE,
     DBSCAN_MIN_SAMPLES,
+    HDBSCAN_MIN_CLUSTER_SIZE,
+    HDBSCAN_MIN_SAMPLES,
     MAPPER_N_CUBES_LIST,
     MAPPER_OVERLAPS_LIST,
     OUTPUTS_DIR,
-    SEED,
 )
 
 log = logging.getLogger(__name__)
@@ -74,6 +75,104 @@ class AdaptiveDBSCAN:
         db.fit(X)
         self.labels_ = db.labels_
         return self
+
+
+class HDBSCANClusterer:
+    """HDBSCAN wrapper compatible with kmapper's fit_predict interface.
+
+    Falls back gracefully when cells have too few points.
+    """
+
+    def __init__(
+        self,
+        min_cluster_size: int = HDBSCAN_MIN_CLUSTER_SIZE,
+        min_samples: int = HDBSCAN_MIN_SAMPLES,
+    ) -> None:
+        self.min_cluster_size = min_cluster_size
+        self.min_samples = min_samples
+        self.labels_: np.ndarray = np.array([])
+
+    def get_params(self, deep: bool = True) -> dict:
+        return {"min_cluster_size": self.min_cluster_size, "min_samples": self.min_samples}
+
+    def fit_predict(self, X: np.ndarray) -> np.ndarray:
+        self.fit(X)
+        return self.labels_
+
+    def fit(self, X: np.ndarray) -> "HDBSCANClusterer":
+        if len(X) <= self.min_cluster_size:
+            self.labels_ = np.zeros(len(X), dtype=int)
+            return self
+
+        from sklearn.cluster import HDBSCAN
+        hdb = HDBSCAN(min_cluster_size=self.min_cluster_size, min_samples=self.min_samples)
+        hdb.fit(X)
+        labels = hdb.labels_.copy()
+        if (labels == -1).all():
+            labels = np.zeros(len(X), dtype=int)
+        self.labels_ = labels
+        return self
+
+
+class AdaptiveAgglomerative:
+    """AgglomerativeClustering (single linkage) with adaptive distance threshold.
+
+    The threshold is derived from the same k-NN percentile used by
+    AdaptiveDBSCAN, so both clusterers operate on a comparable density scale.
+    """
+
+    def __init__(
+        self,
+        k: int = DBSCAN_KNN_K,
+        percentile: int = DBSCAN_KNN_PERCENTILE,
+        linkage: str = "single",
+    ) -> None:
+        self.k = k
+        self.percentile = percentile
+        self.linkage = linkage
+        self.labels_: np.ndarray = np.array([])
+
+    def get_params(self, deep: bool = True) -> dict:
+        return {"k": self.k, "percentile": self.percentile, "linkage": self.linkage}
+
+    def fit_predict(self, X: np.ndarray) -> np.ndarray:
+        self.fit(X)
+        return self.labels_
+
+    def fit(self, X: np.ndarray) -> "AdaptiveAgglomerative":
+        if len(X) <= 1:
+            self.labels_ = np.zeros(len(X), dtype=int)
+            return self
+
+        k = min(self.k, len(X) - 1)
+        nn = NearestNeighbors(n_neighbors=k + 1, algorithm="auto")
+        nn.fit(X)
+        distances, _ = nn.kneighbors(X)
+        threshold = float(np.percentile(distances[:, k], self.percentile))
+        threshold = max(threshold, 1e-6)
+
+        agg = AgglomerativeClustering(
+            n_clusters=None,
+            linkage=self.linkage,
+            distance_threshold=threshold,
+        )
+        agg.fit(X)
+        self.labels_ = agg.labels_
+        return self
+
+
+# Ordered list of (name, class) pairs explored in every sweep.
+# Add or remove entries here to change which clusterers are compared.
+_CLUSTERERS: List[Tuple[str, Type]] = [
+    ("AdaptiveDBSCAN",    AdaptiveDBSCAN),
+    ("HDBSCAN",           HDBSCANClusterer),
+    ("AdaptiveAgglom",    AdaptiveAgglomerative),
+]
+
+
+def build_clusterers() -> List[Tuple[str, Type]]:
+    """Return the list of (name, class) pairs used in the parameter sweep."""
+    return list(_CLUSTERERS)
 
 
 def _graph_to_nx(graph: Graph) -> nx.Graph:
@@ -186,7 +285,7 @@ def multiscale_sweep(
     lens: np.ndarray,
     X: np.ndarray,
 ) -> Tuple[pd.DataFrame, Dict, List[Graph], int]:
-    """Run Mapper for all 20 (n_cubes × overlap) combinations.
+    """Run Mapper for all (n_cubes × overlap × clusterer) combinations.
 
     Parameters
     ----------
@@ -195,46 +294,57 @@ def multiscale_sweep(
 
     Returns
     -------
-    sweep_df     : pd.DataFrame with 20 rows and topology metrics.
-    chosen_config: dict with keys n_cubes, overlap.
-    all_graphs   : list of 20 Graph dicts.
-    chosen_idx   : index of chosen config in all_graphs.
+    sweep_df     : pd.DataFrame with topology metrics for every config.
+    chosen_config: dict with keys n_cubes, overlap, clusterer_name, clusterer.
+    all_graphs   : flat list of Graph dicts (one per config, same order as sweep_df).
+    chosen_idx   : index of chosen config in all_graphs / sweep_df.
     """
     OUTPUTS_DIR.mkdir(exist_ok=True)
     rows: List[Dict] = []
     all_graphs: List[Graph] = []
 
+    clusterers = build_clusterers()
+    clusterer_map: Dict[str, Type] = {name: cls for name, cls in clusterers}
+
     configs = [
-        (nc, ov)
+        (nc, ov, cname, ccls)
+        for cname, ccls in clusterers
         for nc in MAPPER_N_CUBES_LIST
         for ov in MAPPER_OVERLAPS_LIST
     ]
+    log.info("Multiscale sweep: %d configs (%d clusterers × %d n_cubes × %d overlaps)",
+             len(configs), len(clusterers), len(MAPPER_N_CUBES_LIST), len(MAPPER_OVERLAPS_LIST))
 
-    for nc, ov in configs:
-        clusterer = AdaptiveDBSCAN()
-        g = run_mapper(lens, X, nc, ov, clusterer)
+    for nc, ov, cname, ccls in configs:
+        g = run_mapper(lens, X, nc, ov, ccls())
         metrics = _graph_metrics(g)
         all_graphs.append(g)
-        row = {"n_cubes": nc, "overlap": ov, **metrics}
-        rows.append(row)
-        log.info("  n_cubes=%2d  overlap=%.2f  →  nodes=%2d  edges=%3d  "
-                 "components=%d  cycles=%d",
-                 nc, ov, metrics["n_nodes"], metrics["n_edges"],
+        rows.append({"n_cubes": nc, "overlap": ov, "clusterer": cname, **metrics})
+        log.info("  n_cubes=%2d  overlap=%.2f  clusterer=%-18s  →  "
+                 "nodes=%3d  edges=%4d  components=%d  cycles=%d",
+                 nc, ov, cname,
+                 metrics["n_nodes"], metrics["n_edges"],
                  metrics["n_components"], metrics["n_cycles"])
 
     sweep_df = pd.DataFrame(rows)
     sweep_df.to_csv(OUTPUTS_DIR / "mapper_multiscale.csv", index=False)
-    log.info("Multiscale sweep saved: mapper_multiscale.csv")
+    log.info("Multiscale sweep saved: mapper_multiscale.csv  (%d rows)", len(sweep_df))
 
-    # Choose config closest to the median number of nodes
+    # Choose the config whose n_nodes is closest to the global median
     median_nodes = sweep_df["n_nodes"].median()
     chosen_idx = int((sweep_df["n_nodes"] - median_nodes).abs().idxmin())
     chosen_row = sweep_df.iloc[chosen_idx]
+    chosen_cname = chosen_row["clusterer"]
     chosen_config = {
-        "n_cubes": int(chosen_row["n_cubes"]),
-        "overlap": float(chosen_row["overlap"]),
+        "n_cubes"       : int(chosen_row["n_cubes"]),
+        "overlap"       : float(chosen_row["overlap"]),
+        "clusterer_name": chosen_cname,
+        "clusterer"     : clusterer_map[chosen_cname],
     }
-    log.info("Chosen config: n_cubes=%d  overlap=%.2f  (median n_nodes=%.1f)",
-             chosen_config["n_cubes"], chosen_config["overlap"], median_nodes)
+    log.info(
+        "Chosen config: n_cubes=%d  overlap=%.2f  clusterer=%s  (median n_nodes=%.1f)",
+        chosen_config["n_cubes"], chosen_config["overlap"],
+        chosen_config["clusterer_name"], median_nodes,
+    )
 
     return sweep_df, chosen_config, all_graphs, chosen_idx

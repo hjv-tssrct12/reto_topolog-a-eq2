@@ -11,8 +11,7 @@ mapper_grid_search(lens, X, cat_vals) -> (best_config, results_df, best_graph)
 """
 
 import logging
-from itertools import product
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Type
 
 import networkx as nx
 import numpy as np
@@ -25,7 +24,13 @@ from src.config import (
     OUTPUTS_DIR,
     SEED,
 )
-from src.mapper_multiscale import AdaptiveDBSCAN, Graph, _graph_to_nx, run_mapper
+from src.mapper_multiscale import (
+    AdaptiveDBSCAN,
+    Graph,
+    _graph_to_nx,
+    build_clusterers,
+    run_mapper,
+)
 
 log = logging.getLogger(__name__)
 
@@ -205,14 +210,15 @@ def mapper_grid_search(
     lens: np.ndarray,
     X: np.ndarray,
     cat_vals: np.ndarray,
-    n_cubes_list:  Optional[List[int]]   = None,
-    overlaps_list: Optional[List[float]] = None,
-    cat_order:     Optional[List[str]]   = None,
+    n_cubes_list:    Optional[List[int]]              = None,
+    overlaps_list:   Optional[List[float]]            = None,
+    cat_order:       Optional[List[str]]              = None,
+    clusterers_list: Optional[List[Tuple[str, Type]]] = None,
 ) -> Tuple[Dict, pd.DataFrame, Graph]:
-    """Exhaustive grid search over Mapper (n_cubes, overlap) pairs.
+    """Exhaustive grid search over Mapper (n_cubes × overlap × clusterer).
 
     For each configuration the function:
-      1. Runs KeplerMapper with AdaptiveDBSCAN.
+      1. Runs KeplerMapper with the specified clusterer.
       2. Computes five quality metrics.
       3. Normalises metrics across configs and computes a weighted composite.
       4. Applies a sigmoid size penalty to discount overly-large graphs.
@@ -221,49 +227,53 @@ def mapper_grid_search(
     Size penalty
     ------------
     score_final = composite_score × penalty(n_nodes)
-
-    penalty(n) = 1 / (1 + exp(K × (n − TARGET)))
-
-    With TARGET={target} and K={k}, configs with ≤180 nodes are almost
-    unaffected (penalty ≥ 0.87) while configs above 280 nodes are heavily
-    discounted (penalty < 0.20), preventing the selection of graphs too
-    fragmented for per-node statistical testing.
+    penalty(n)  = 1 / (1 + exp(K × (n − TARGET)))
 
     Parameters
     ----------
-    lens          : np.ndarray, shape (n, 2)  — UMAP lens from Phase 4.
-    X             : np.ndarray, shape (n, p)  — scaled feature matrix.
-    cat_vals      : np.ndarray, shape (n,)    — AF category labels (str).
-    n_cubes_list  : override MAPPER_N_CUBES_LIST from config.
-    overlaps_list : override MAPPER_OVERLAPS_LIST from config.
-    cat_order     : ordinal category list (inferred from cat_vals if None).
+    lens            : np.ndarray, shape (n, 2)
+    X               : np.ndarray, shape (n, p)
+    cat_vals        : np.ndarray, shape (n,)
+    n_cubes_list    : override MAPPER_N_CUBES_LIST from config.
+    overlaps_list   : override MAPPER_OVERLAPS_LIST from config.
+    cat_order       : ordinal category list (inferred if None).
+    clusterers_list : list of (name, class) pairs; defaults to build_clusterers().
 
     Returns
     -------
-    best_config : dict — {{"n_cubes": int, "overlap": float,
-                           "composite_score": float, "penalised_score": float,
-                           "size_penalty": float}}
+    best_config : dict — n_cubes, overlap, clusterer_name, clusterer, scores.
     results_df  : pd.DataFrame — all configs ranked by penalised_score (desc).
     best_graph  : Graph — kmapper graph for the best config.
-    """.format(target=_PENALTY_TARGET, k=_PENALTY_K)
-
+    """
     OUTPUTS_DIR.mkdir(exist_ok=True)
 
-    if n_cubes_list  is None: n_cubes_list  = MAPPER_N_CUBES_LIST
-    if overlaps_list is None: overlaps_list = MAPPER_OVERLAPS_LIST
+    if n_cubes_list    is None: n_cubes_list    = MAPPER_N_CUBES_LIST
+    if overlaps_list   is None: overlaps_list   = MAPPER_OVERLAPS_LIST
+    if clusterers_list is None: clusterers_list = build_clusterers()
 
-    configs = list(product(n_cubes_list, overlaps_list))
-    total   = len(configs)
-    log.info("Mapper grid search: %d configurations  (penalty target=%d nodes)",
-             total, _PENALTY_TARGET)
+    clusterer_map: Dict[str, Type] = {name: cls for name, cls in clusterers_list}
+
+    configs = [
+        (nc, ov, cname, ccls)
+        for nc in n_cubes_list
+        for ov in overlaps_list
+        for cname, ccls in clusterers_list
+    ]
+    total = len(configs)
+    log.info(
+        "Mapper grid search: %d configurations  "
+        "(%d n_cubes × %d overlaps × %d clusterers, penalty target=%d nodes)",
+        total, len(n_cubes_list), len(overlaps_list), len(clusterers_list), _PENALTY_TARGET,
+    )
 
     rows:   List[Dict]  = []
     graphs: List[Graph] = []
 
-    for i, (nc, ov) in enumerate(configs, start=1):
-        log.info("[Mapper GS %d/%d] n_cubes=%d  overlap=%.2f", i, total, nc, ov)
+    for i, (nc, ov, cname, ccls) in enumerate(configs, start=1):
+        log.info("[Mapper GS %d/%d] n_cubes=%d  overlap=%.2f  clusterer=%s",
+                 i, total, nc, ov, cname)
 
-        g = run_mapper(lens, X, nc, ov, AdaptiveDBSCAN())
+        g = run_mapper(lens, X, nc, ov, ccls())
         graphs.append(g)
 
         G        = _graph_to_nx(g)
@@ -275,18 +285,19 @@ def mapper_grid_search(
         rows.append({
             "n_cubes"       : nc,
             "overlap"       : ov,
+            "clusterer"     : cname,
             "n_nodes"       : n_nodes,
             "n_edges"       : n_edges,
             "n_components"  : n_comp,
             "n_cycles"      : n_cycles,
-            "overlap_ratio" : round(_node_overlap_ratio(g),          4),
-            "mean_node_size": round(_mean_node_size(g),               2),
-            "size_cv"       : round(_node_size_cv(g),                 4),
-            "graph_density" : round(_graph_density(g),                4),
-            "lcc_fraction"  : round(_lcc_fraction(g),                 4),
-            "node_cohesion" : round(_mean_node_cohesion(g, X),        4),
+            "overlap_ratio" : round(_node_overlap_ratio(g),                    4),
+            "mean_node_size": round(_mean_node_size(g),                         2),
+            "size_cv"       : round(_node_size_cv(g),                           4),
+            "graph_density" : round(_graph_density(g),                          4),
+            "lcc_fraction"  : round(_lcc_fraction(g),                           4),
+            "node_cohesion" : round(_mean_node_cohesion(g, X),                  4),
             "cat_separation": round(_category_separation(g, cat_vals, cat_order), 4),
-            "size_penalty"  : round(_size_penalty(n_nodes),           4),
+            "size_penalty"  : round(_size_penalty(n_nodes),                     4),
         })
 
         log.info(
@@ -323,14 +334,17 @@ def mapper_grid_search(
     results_df.reset_index(drop=True, inplace=True)
 
     results_df.to_csv(OUTPUTS_DIR / "mapper_grid_search.csv", index=False)
-    log.info("Mapper grid search saved: mapper_grid_search.csv")
+    log.info("Mapper grid search saved: mapper_grid_search.csv  (%d rows)", len(results_df))
 
     # ── Best config ────────────────────────────────────────────────────────
-    best_row = results_df.iloc[0]
+    best_row    = results_df.iloc[0]
+    best_cname  = best_row["clusterer"]
     best_config = {
         "n_cubes"         : int(best_row["n_cubes"]),
         "overlap"         : float(best_row["overlap"]),
-        "score"           : float(best_row["penalised_score"]),   # kept as "score" for compatibility
+        "clusterer_name"  : best_cname,
+        "clusterer"       : clusterer_map[best_cname],
+        "score"           : float(best_row["penalised_score"]),
         "composite_score" : float(best_row["composite_score"]),
         "penalised_score" : float(best_row["penalised_score"]),
         "size_penalty"    : float(best_row["size_penalty"]),
@@ -341,13 +355,13 @@ def mapper_grid_search(
         lens, X,
         best_config["n_cubes"],
         best_config["overlap"],
-        AdaptiveDBSCAN(),
+        best_config["clusterer"](),
     )
 
     log.info(
-        "Best Mapper config: n_cubes=%d  overlap=%.2f  "
+        "Best Mapper config: n_cubes=%d  overlap=%.2f  clusterer=%s  "
         "composite=%.4f  penalty=%.3f  penalised=%.4f",
-        best_config["n_cubes"], best_config["overlap"],
+        best_config["n_cubes"], best_config["overlap"], best_config["clusterer_name"],
         best_config["composite_score"], best_config["size_penalty"],
         best_config["penalised_score"],
     )

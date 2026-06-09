@@ -62,13 +62,15 @@ def bootstrap_stability(
     bajo_counts  = np.zeros(n, dtype=int)
     appearances  = np.zeros(n, dtype=int)
 
+    clusterer_cls = chosen_config.get("clusterer", AdaptiveDBSCAN)
+
     for i in range(n_iter):
         idx = rng.choice(n, size=n, replace=True)
         X_b    = X[idx]
         lens_b = lens[idx]
         cats_b = cat_vals[idx]
 
-        graph = run_mapper(lens_b, X_b, nc, ov, AdaptiveDBSCAN())
+        graph = run_mapper(lens_b, X_b, nc, ov, clusterer_cls())
         dom   = _dominant_category(graph, cats_b)
 
         # Map bootstrap sample back to original indices
@@ -146,12 +148,13 @@ def perturbation_stability(
     """
     rng = np.random.default_rng(seed)
     nc, ov = chosen_config["n_cubes"], chosen_config["overlap"]
+    clusterer_cls = chosen_config.get("clusterer", AdaptiveDBSCAN)
     similarities: List[float] = []
 
     for i in range(n_iter):
         noise = rng.normal(0, sigma, size=X.shape)
         X_pert = np.clip(X + noise, 0, 1)
-        g_pert = run_mapper(lens, X_pert, nc, ov, AdaptiveDBSCAN())
+        g_pert = run_mapper(lens, X_pert, nc, ov, clusterer_cls())
         sim = _mean_jaccard_between_graphs(original_graph, g_pert)
         similarities.append(sim)
 

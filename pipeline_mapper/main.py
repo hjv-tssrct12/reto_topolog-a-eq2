@@ -78,8 +78,9 @@ def main() -> None:
              len(__import__('src.config', fromlist=['MAPPER_N_CUBES_LIST']).MAPPER_N_CUBES_LIST)
              * len(__import__('src.config', fromlist=['MAPPER_OVERLAPS_LIST']).MAPPER_OVERLAPS_LIST))
     sweep_df, chosen_config, all_graphs, chosen_idx = multiscale_sweep(best_lens, X_features)
-    log.info("  Chosen config (median nodes): n_cubes=%d  overlap=%.2f",
-             chosen_config["n_cubes"], chosen_config["overlap"])
+    log.info("  Chosen config (median nodes): n_cubes=%d  overlap=%.2f  clusterer=%s",
+             chosen_config["n_cubes"], chosen_config["overlap"],
+             chosen_config.get("clusterer_name", "AdaptiveDBSCAN"))
 
     # ── Phase 5b: Mapper grid search ───────────────────────────────────────
     log.info("[Phase 5b] Mapper grid search (multi-metric scoring) ...")
@@ -87,8 +88,9 @@ def main() -> None:
         best_lens, X_features, cat_vals,
     )
     log.info(
-        "  Best config (grid search): n_cubes=%d  overlap=%.2f  score=%.4f",
-        gs_config["n_cubes"], gs_config["overlap"], gs_config["score"],
+        "  Best config (grid search): n_cubes=%d  overlap=%.2f  clusterer=%s  score=%.4f",
+        gs_config["n_cubes"], gs_config["overlap"],
+        gs_config.get("clusterer_name", "AdaptiveDBSCAN"), gs_config["score"],
     )
 
     # ── Choose final config: prefer grid-search winner ─────────────────────
@@ -99,8 +101,9 @@ def main() -> None:
     final_config = gs_config
     final_graph  = gs_graph
     log.info(
-        "  Final config adopted: n_cubes=%d  overlap=%.2f",
+        "  Final config adopted: n_cubes=%d  overlap=%.2f  clusterer=%s",
         final_config["n_cubes"], final_config["overlap"],
+        final_config.get("clusterer_name", "AdaptiveDBSCAN"),
     )
     log.info("  Final graph: %d nodes  %d edges",
              len(final_graph["nodes"]),
@@ -193,9 +196,9 @@ def main() -> None:
     print(f"  Nodos significativos      : {n_sig}")
     print(f"  Ciclos H₁ persistentes    : {h1_summary['n_h1_persistent']}")
     print(f"  Similitud perturbación    : {perturbation_stats['mean']:.3f} ± {perturbation_stats['std']:.3f}")
-    print(f"  Config sweep (mediana)    : n_cubes={chosen_config['n_cubes']}  overlap={chosen_config['overlap']}")
-    print(f"  Config grid search        : n_cubes={gs_config['n_cubes']}  overlap={gs_config['overlap']}  score={gs_config['score']:.4f}")
-    print(f"  Config final adoptada     : n_cubes={final_config['n_cubes']}  overlap={final_config['overlap']}")
+    print(f"  Config sweep (mediana)    : n_cubes={chosen_config['n_cubes']}  overlap={chosen_config['overlap']}  clusterer={chosen_config.get('clusterer_name', 'AdaptiveDBSCAN')}")
+    print(f"  Config grid search        : n_cubes={gs_config['n_cubes']}  overlap={gs_config['overlap']}  clusterer={gs_config.get('clusterer_name', 'AdaptiveDBSCAN')}  score={gs_config['score']:.4f}")
+    print(f"  Config final adoptada     : n_cubes={final_config['n_cubes']}  overlap={final_config['overlap']}  clusterer={final_config.get('clusterer_name', 'AdaptiveDBSCAN')}")
     print(f"  Mejor regresor            : {best_reg['modelo']} (R²={best_reg['best_score']:.3f})")
     print(f"  Mejor clasificador        : {best_clf['modelo']} (f1_macro={best_clf['f1_macro']:.3f}  acc={best_clf['accuracy_cv']:.3f})")
     print(f"    Bajo  → f1={best_clf.get('f1_Bajo',  0):.3f}  precision={best_clf.get('precision_Bajo',  0):.3f}  recall={best_clf.get('recall_Bajo',  0):.3f}")

@@ -8,3 +8,5 @@ __pycache__/
 
 # Config local
 .claude/settings.local.json
+
+.claude/

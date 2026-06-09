@@ -28,6 +28,12 @@ MATERNAS   = ["Edad madre", "Educación", "N° embarazo", "Región", "Dif peso m
 NEONATALES = ["Sexo hijo", "PN hijo (g)", "EG hijo (sem)"]
 FEATURE_COLS = MATERNAS + NEONATALES
 
+# Columns that contain text categories and must be ordinal-encoded before scaling
+CATEGORICAL_ENCODE_COLS: list = ["Educación", "Región", "Sexo hijo"]
+
+# Columns that may be read as strings and must be forced to numeric
+NUMERIC_FORCE_COLS: list = ["PN hijo (g)", "EG hijo (sem)", "Dif peso mamá", "Dif IMC"]
+
 CAT_COLORS = {"Bajo": "#4C72B0", "Medio": "#DD8452", "Alto": "#55A868"}
 
 # ---------------------------------------------------------------------------
@@ -42,9 +48,10 @@ UMAP_TRUST_N_NEIGHBORS      = 5                 # used for trustworthiness / con
 # ---------------------------------------------------------------------------
 # Mapper multiscale sweep
 # ---------------------------------------------------------------------------
-MAPPER_N_CUBES_LIST  = [5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17, 20, 25, 30]  # 14 valores
-MAPPER_OVERLAPS_LIST = [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]  # 15 valores  
-# 14 × 15 = 210 configs ✓
+MAPPER_N_CUBES_LIST  = [5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17, 20, 25, 30, 35, 40, 50]  # 17 valores
+MAPPER_OVERLAPS_LIST = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50,
+                        0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85]             # 16 valores
+# 17 × 16 = 272 cover configs; × 3 clusterers = 816 configs totales
 
 # ---------------------------------------------------------------------------
 # Adaptive DBSCAN (per-cell)
@@ -52,6 +59,12 @@ MAPPER_OVERLAPS_LIST = [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.
 DBSCAN_KNN_K          = 5
 DBSCAN_KNN_PERCENTILE = 10
 DBSCAN_MIN_SAMPLES    = 3
+
+# ---------------------------------------------------------------------------
+# HDBSCAN clusterer
+# ---------------------------------------------------------------------------
+HDBSCAN_MIN_CLUSTER_SIZE = 3
+HDBSCAN_MIN_SAMPLES      = 1
 
 # ---------------------------------------------------------------------------
 # Stability

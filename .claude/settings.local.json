@@ -20,7 +20,14 @@
       "Bash(git fetch *)",
       "Bash(git checkout *)",
       "Bash(Get-ChildItem -Recurse -Force)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(py --version)",
+      "Bash(where python *)",
+      "Bash(where py *)",
+      "Bash(C:\\\\Users\\\\hugoj\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe -m pip list --path \"C:\\\\Users\\\\hugoj\\\\Desktop\\\\Tec\\\\Topo\\\\Reto_Topolog-a-Eq2\\\\.venv\\\\Lib\\\\site-packages\")",
+      "PowerShell(& \"C:\\\\Users\\\\hugoj\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\" -m pip list --path \"C:\\\\Users\\\\hugoj\\\\Desktop\\\\Tec\\\\Topo\\\\Reto_Topolog-a-Eq2\\\\.venv\\\\Lib\\\\site-packages\" 2>&1 | Select-Object -First 60)",
+      "Bash(Get-ChildItem -Recurse -Directory -Exclude .venv)",
+      "Bash(xargs wc -l)"
     ]
   }
 }
